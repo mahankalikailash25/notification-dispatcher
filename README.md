@@ -42,7 +42,7 @@ curl https://notification-dispatcher.onrender.com/api/v1/events
 curl https://notification-dispatcher.onrender.com/health
 ```
 
-> **Note:** if this is running on Render's free tier, the service spins down after periods of inactivity. The first request after idling can take 30–60 seconds while the instance cold-starts — subsequent requests are fast. Also note that Render's free tier uses an ephemeral filesystem, so the SQLite database resets on every redeploy or restart unless a persistent disk is attached.
+> **Note:** The first request after idling can take 30–60 seconds while the instance cold-starts — subsequent requests are fast. Also note that Render's free tier uses an ephemeral filesystem, so the SQLite database resets on every redeploy or restart unless a persistent disk is attached.
 
 ---
 
