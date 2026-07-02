@@ -30,7 +30,7 @@ async function bootstrap() {
 
     // 3. Start listening for HTTP requests.
     app.listen(PORT, () => {
-      console.log(`[SERVER] Started on http://localhost:${PORT}`);
+      console.log(`[SERVER] Server listening on port ${PORT}`);
     });
   } catch (err) {
     console.error('[SERVER] Failed to start:', err.message);
