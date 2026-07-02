@@ -41,7 +41,39 @@ async function markFailed(notificationId) {
   );
 }
 
+/**
+ * Fetches a single notification by id. Returns undefined if not found.
+ * @param {number} notificationId
+ */
+async function getNotificationById(notificationId) {
+  return db.get(`SELECT * FROM notifications WHERE id = ?`, [notificationId]);
+}
+
+/**
+ * Fetches notifications, optionally filtered by status, most recent
+ * first, with basic pagination.
+ *
+ * @param {object} options
+ * @param {string} [options.status] - filter by 'pending' | 'completed' | 'failed'
+ * @param {number} [options.limit]
+ * @param {number} [options.offset]
+ */
+async function getAllNotifications({ status, limit = 50, offset = 0 } = {}) {
+  if (status) {
+    return db.all(
+      `SELECT * FROM notifications WHERE status = ? ORDER BY id DESC LIMIT ? OFFSET ?`,
+      [status, limit, offset]
+    );
+  }
+  return db.all(
+    `SELECT * FROM notifications ORDER BY id DESC LIMIT ? OFFSET ?`,
+    [limit, offset]
+  );
+}
+
 module.exports = {
   markCompleted,
   markFailed,
+  getNotificationById,
+  getAllNotifications,
 };
