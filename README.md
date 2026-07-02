@@ -454,13 +454,3 @@ All controller logic is wrapped in `try/catch` and forwards errors to Express's 
 
 ---
 
-## Future Improvements
-
-- **Startup recovery**: on boot, re-enqueue any notifications still in `pending` status so the queue survives process restarts.
-- **Retry backoff**: automatically re-enqueue `failed` notifications up to a max `retry_count` with exponential backoff.
-- **Concurrency**: process multiple notifications in parallel (bounded worker pool) instead of strictly sequential dequeueing.
-- **Real delivery providers**: swap the simulated send in `queueWorker.js` for a real email/SMS provider integration.
-- **Observability**: structured JSON logging, request IDs, and metrics (queue depth, processing latency, failure rate).
-- **Tests**: add unit tests for services and an integration test suite for the API using a temporary SQLite file.
-- **Filtering/sorting on GET endpoints**: add `event_type` filtering on `GET /api/v1/events` and date-range filtering, similar to the `status` filter already available on `GET /api/v1/notifications`.
-- **Persistent storage in deployment**: attach a persistent disk (or move to a managed Postgres/SQLite-compatible store) so data survives redeploys on platforms with ephemeral filesystems like Render's free tier.
