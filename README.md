@@ -18,6 +18,34 @@ This mirrors the shape of a real production notification pipeline (API → durab
 
 ---
 
+## Live Demo
+
+The project is deployed on [Render](https://render.com):
+
+**Base URL:** `https://notification-dispatcher.onrender.com`
+
+Try it directly:
+
+```bash
+curl -X POST https://notification-dispatcher.onrender.com/api/v1/events \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "order_placed",
+    "recipient": "user@example.com",
+    "data": { "order_id": 101 }
+  }'
+```
+
+```bash
+curl https://notification-dispatcher.onrender.com/api/v1/notifications/1
+curl https://notification-dispatcher.onrender.com/api/v1/events
+curl https://notification-dispatcher.onrender.com/health
+```
+
+> **Note:** if this is running on Render's free tier, the service spins down after periods of inactivity. The first request after idling can take 30–60 seconds while the instance cold-starts — subsequent requests are fast. Also note that Render's free tier uses an ephemeral filesystem, so the SQLite database resets on every redeploy or restart unless a persistent disk is attached.
+
+---
+
 ## Features
 
 - `POST /api/v1/events` endpoint with request validation
@@ -163,6 +191,106 @@ HTTP 202 Accepted
 - `tracking_id` — the created event's id
 - `notification_id` — the created notification's id (poll the DB directly to check its final status)
 
+### `GET /api/v1/events/:id`
+
+Returns a single event along with every notification created for it.
+
+**Success response**
+
+```json
+HTTP 200
+{
+  "id": 1,
+  "event_type": "order_placed",
+  "payload": { "recipient": "user@example.com", "data": { "order_id": 101 } },
+  "created_at": "2026-07-02T07:19:03.314Z",
+  "notifications": [
+    {
+      "id": 1,
+      "event_id": 1,
+      "recipient": "user@example.com",
+      "channel": "email",
+      "status": "completed",
+      "retry_count": 0,
+      "created_at": "2026-07-02T07:19:03.335Z",
+      "updated_at": "2026-07-02T07:19:03.335Z"
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Condition                | Response                                             |
+|---------------------------|-------------------------------------------------------|
+| `id` not a positive integer | `400 { "error": "id must be a positive integer" }` |
+| Event doesn't exist        | `404 { "error": "Event <id> not found" }`           |
+
+### `GET /api/v1/events`
+
+Returns a paginated list of events (most recent first), each with its notifications attached.
+
+**Query params**
+
+| Param    | Default | Notes                          |
+|----------|---------|---------------------------------|
+| `limit`  | `50`    | capped at `200`                |
+| `offset` | `0`     | for paging through older events |
+
+```json
+HTTP 200
+{
+  "count": 2,
+  "limit": 50,
+  "offset": 0,
+  "events": [ { "...": "same shape as GET /events/:id" } ]
+}
+```
+
+### `GET /api/v1/notifications/:id`
+
+Returns a single notification, most useful for polling delivery status after receiving `tracking_id`/`notification_id` from `POST /api/v1/events`.
+
+```json
+HTTP 200
+{
+  "id": 1,
+  "event_id": 1,
+  "recipient": "user@example.com",
+  "channel": "email",
+  "status": "completed",
+  "retry_count": 0,
+  "created_at": "2026-07-02T07:19:03.335Z",
+  "updated_at": "2026-07-02T07:19:03.335Z"
+}
+```
+
+`404 { "error": "Notification <id> not found" }` if it doesn't exist.
+
+### `GET /api/v1/notifications`
+
+Returns a paginated list of notifications, most recent first, optionally filtered by status.
+
+**Query params**
+
+| Param    | Default | Notes                                             |
+|----------|---------|-----------------------------------------------------|
+| `status` | none    | one of `pending`, `completed`, `failed`             |
+| `limit`  | `50`    | capped at `200`                                    |
+| `offset` | `0`     | for paging                                          |
+
+Invalid `status` values return `400 { "error": "status must be one of: pending, completed, failed" }`.
+
+```json
+HTTP 200
+{
+  "count": 1,
+  "limit": 50,
+  "offset": 0,
+  "notifications": [ { "...": "same shape as GET /notifications/:id" } ]
+}
+```
+
 ### `GET /health`
 
 Simple liveness check, returns `{ "status": "ok" }`.
@@ -181,6 +309,8 @@ curl -X POST http://localhost:3000/api/v1/events \
   }'
 ```
 
+> Swap `http://localhost:3000` for `https://notification-dispatcher.onrender.com` to hit the live deployment instead — see [Live Demo](#live-demo) above.
+
 ## Sample Response
 
 ```json
@@ -198,6 +328,25 @@ Console output shortly after (from the background worker):
 [QUEUE] Notification Added -> notification_id=1, event_id=1
 [WORKER] Processing Notification -> notification_id=1, recipient=user@example.com, channel=email
 [WORKER] Notification Completed -> notification_id=1
+```
+
+You can then poll for the final delivery status using the `notification_id` returned above:
+
+```bash
+curl http://localhost:3000/api/v1/notifications/1
+```
+
+```json
+{
+  "id": 1,
+  "event_id": 1,
+  "recipient": "user@example.com",
+  "channel": "email",
+  "status": "completed",
+  "retry_count": 0,
+  "created_at": "2026-07-02T07:19:03.335Z",
+  "updated_at": "2026-07-02T07:19:03.335Z"
+}
 ```
 
 ---
@@ -311,5 +460,7 @@ All controller logic is wrapped in `try/catch` and forwards errors to Express's 
 - **Retry backoff**: automatically re-enqueue `failed` notifications up to a max `retry_count` with exponential backoff.
 - **Concurrency**: process multiple notifications in parallel (bounded worker pool) instead of strictly sequential dequeueing.
 - **Real delivery providers**: swap the simulated send in `queueWorker.js` for a real email/SMS provider integration.
-- **Observability**: expose a `GET /api/v1/notifications/:id` status endpoint and/or structured JSON logging.
+- **Observability**: structured JSON logging, request IDs, and metrics (queue depth, processing latency, failure rate).
 - **Tests**: add unit tests for services and an integration test suite for the API using a temporary SQLite file.
+- **Filtering/sorting on GET endpoints**: add `event_type` filtering on `GET /api/v1/events` and date-range filtering, similar to the `status` filter already available on `GET /api/v1/notifications`.
+- **Persistent storage in deployment**: attach a persistent disk (or move to a managed Postgres/SQLite-compatible store) so data survives redeploys on platforms with ephemeral filesystems like Render's free tier.
